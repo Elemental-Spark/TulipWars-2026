@@ -1,0 +1,4 @@
+Options -Indexes
+<FilesMatch "\.(tar|tar\.gz|tgz)$">
+    Require all denied
+</FilesMatch>

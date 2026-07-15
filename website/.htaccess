@@ -1,0 +1,8 @@
+Options -Indexes
+DirectoryIndex index.php
+
+# Old patch/download endpoints are obsolete in v0.1.6. The complete installer
+# is a single local file and does not use Tulip World or a per-file web API.
+<FilesMatch "^(download\.php|tulipwars_files\.php)$">
+    Require all denied
+</FilesMatch>
