@@ -53,6 +53,10 @@ def _load_modules(app=None):
 class TulipWarsGame:
     WIDTH = 128
     HEIGHT = 50
+    CONTENT_WIDTH = 95
+    KEYPAD_X = 96
+    TFB_CHAR_W = 8
+    TFB_CHAR_H = 12
     FG = 159
     DIM = 67
     BRIGHT = 231
@@ -88,6 +92,9 @@ class TulipWarsGame:
         self.last_tracker_redraw = 0
         self.request_pending = False
         self.heartbeat_pending = False
+        self.touch_keys = []
+        self.last_touch_ms = 0
+        self.audio_fault = None
 
     def start(self):
         tulip.gpu_reset()
@@ -207,9 +214,97 @@ class TulipWarsGame:
         if bg is None:
             bg = self.BG
         text = str(text).replace("\n", " ")
-        if len(text) > self.WIDTH:
-            text = text[:self.WIDTH]
-        tulip.tfb_str(0, y, text + (" " * (self.WIDTH - len(text))), fmt, fg, bg)
+        if len(text) > self.CONTENT_WIDTH:
+            text = text[:self.CONTENT_WIDTH]
+        tulip.tfb_str(0, y, text + (" " * (self.CONTENT_WIDTH - len(text))), fmt, fg, bg)
+        # Menu lines beginning with [X] can be touched directly as well as by
+        # using the terminal keypad. This makes every numbered screen choice
+        # accessible without a hardware keyboard.
+        if len(text) >= 3 and text[0] == "[" and text[2] == "]":
+            self.touch_keys.append((0, y, self.CONTENT_WIDTH - 1, y, ord(text[1])))
+
+    def _pad_write(self, x, y, text, fg=None, bg=None, fmt=0):
+        if y < 0 or y >= self.HEIGHT or x < 0 or x >= self.WIDTH:
+            return
+        if fg is None:
+            fg = self.FG
+        if bg is None:
+            bg = self.BG
+        text = str(text)[:self.WIDTH - x]
+        tulip.tfb_str(x, y, text, fmt, fg, bg)
+
+    def _touch_layout(self):
+        if self.screen == "chat" and self.composing:
+            return [
+                (("1", 49), ("2", 50), ("3", 51), ("4", 52)),
+                (("5", 53), ("6", 54), ("7", 55), ("8", 56)),
+                (("9", 57), ("0", 48), ("A", 65), ("B", 66)),
+                (("C", 67), ("D", 68), ("E", 69), ("F", 70)),
+                (("G", 71), ("H", 72), ("I", 73), ("J", 74)),
+                (("K", 75), ("L", 76), ("M", 77), ("N", 78)),
+                (("O", 79), ("P", 80), ("Q", 81), ("R", 82)),
+                (("S", 83), ("T", 84), ("U", 85), ("V", 86)),
+                (("W", 87), ("X", 88), ("Y", 89), ("Z", 90)),
+                (("SPC", 32), ("DEL", 8), ("ENT", 13), ("ESC", 27)),
+            ]
+        return [
+            (("1", 49), ("2", 50), ("3", 51), ("R", 82)),
+            (("4", 52), ("5", 53), ("6", 54), ("B", 66)),
+            (("7", 55), ("8", 56), ("9", 57), ("S", 83)),
+            (("0", 48), ("F", 70), ("D", 68), ("T", 84)),
+            (("W", 87), ("P", 80), ("M", 77), ("E", 69)),
+            (("[", 91), ("]", 93), ("-", 45), ("+", 43)),
+            ((",", 44), (".", 46), ("SPC", 32), ("ENT", 13)),
+            (("DEL", 8), ("ESC", 27), ("BACK", 48), ("REF", 82)),
+        ]
+
+    def _draw_touch_keypad(self):
+        # The TFB default font is 8x12 on a 128x50 character grid. The keypad
+        # therefore uses character-space hit boxes that map consistently to the
+        # physical 1024x600 touch panel and to mouse clicks in Tulip Web.
+        for row in range(self.HEIGHT):
+            self._pad_write(self.KEYPAD_X - 1, row, "|", self.ACCENT)
+        title = "TOUCH CHAT" if self.screen == "chat" and self.composing else "TOUCH TERMINAL"
+        self._pad_write(self.KEYPAD_X + 8, 0, title[:16], self.BRIGHT, 17, 0x10)
+        self._pad_write(self.KEYPAD_X, 1, "-" * 32, self.ACCENT)
+        layout = self._touch_layout()
+        start_y = 4 if len(layout) >= 10 else 6
+        for row_index, row_keys in enumerate(layout):
+            y = start_y + row_index * 4
+            for col_index, item in enumerate(row_keys):
+                label, code = item
+                x = self.KEYPAD_X + col_index * 8
+                shown = str(label)[:5].center(5)
+                self._pad_write(x, y, "+-----+", self.DIM)
+                self._pad_write(x, y + 1, "|" + shown + "|", self.BRIGHT, 17)
+                self._pad_write(x, y + 2, "+-----+", self.DIM)
+                self.touch_keys.append((x, y, x + 6, y + 2, code))
+        self._pad_write(self.KEYPAD_X, 47, "TAP KEY OR MENU LINE".center(32), self.DIM)
+
+    def touch(self, up):
+        if not up:
+            return
+        try:
+            now = tulip.ticks_ms()
+        except Exception:
+            now = 0
+        if now and now - self.last_touch_ms < 140:
+            return
+        try:
+            points = tulip.touch()
+            px = int(points[0])
+            py = int(points[1])
+        except Exception:
+            return
+        if px < 0 or py < 0:
+            return
+        col = px // self.TFB_CHAR_W
+        row = py // self.TFB_CHAR_H
+        for x0, y0, x1, y1, code in reversed(self.touch_keys):
+            if x0 <= col <= x1 and y0 <= row <= y1:
+                self.last_touch_ms = now
+                self.key(code)
+                return
 
     def _header(self, section):
         self._line(0, "=" * self.WIDTH, self.ACCENT)
@@ -227,12 +322,14 @@ class TulipWarsGame:
         self._line(49, "CTRL-Q QUITS  //  CTRL-TAB SWITCHES APPS", self.DIM)
 
     def draw(self):
+        self.touch_keys = []
         self._blank()
         method = getattr(self, "draw_" + self.screen, None)
         if method is None:
             self.screen = "home"
             method = self.draw_home
         method()
+        self._draw_touch_keypad()
 
     def draw_configure(self):
         self._header("FIRST CONTACT")
@@ -280,7 +377,7 @@ class TulipWarsGame:
                 self._line(20 + index, "%-22s %s" % (captain.get("callsign", "ANON"), captain.get("activity", "DOCKED")))
         else:
             self._line(20, "NO OTHER ACTIVE SIGNALS AT THIS STATION.", self.DIM)
-        self._footer("[1-7] SELECT TERMINAL   [R] REFRESH")
+        self._footer("[1-7] SELECT TERMINAL   [R] REFRESH   // TOUCH KEYPAD READY")
 
     def draw_status(self):
         self._header("SHIP STATUS")
@@ -393,7 +490,7 @@ class TulipWarsGame:
         if self.tracker.last_export:
             status = "BROWSER DOWNLOADED" if self.tracker.last_browser_download else "SAVED LOCALLY"
             self._line(25, "LAST EXPORT: %s // %s" % (self.tracker.last_export, status), self.GOOD)
-        self._footer("[0] BACK   AMY AUDIO ONLY - NO SAMPLES")
+        self._footer("[0] BACK   TOUCH CONTROLS ACTIVE   AMY AUDIO ONLY")
 
     def draw_world(self):
         self._header("TULIP WORLD PUBLIC LOUNGE")
@@ -627,7 +724,16 @@ class TulipWarsGame:
                     self.last_tracker_redraw = now
                     self.draw()
         else:
-            self.audio.tick(now)
+            if self.audio_fault is None:
+                try:
+                    self.audio.tick(now)
+                except Exception as exc:
+                    # A platform audio-clock difference must never flood the
+                    # frame callback with tracebacks or make the game unusable.
+                    self.audio_fault = str(exc)
+                    self.audio.stop()
+                    self.message = "AMY SAFETY STOP: %s" % self.audio_fault
+                    self.draw()
 
         if self.online and now - self.last_heartbeat >= tw_config.HEARTBEAT_MS:
             self.last_heartbeat = now
@@ -682,6 +788,7 @@ def activate(app):
             GAME = TulipWarsGame(app)
         GAME.start()
         tulip.keyboard_callback(on_key)
+        tulip.touch_callback(on_touch)
         tulip.frame_callback(on_frame, app)
     except Exception as exc:
         _fatal_screen(exc)
@@ -689,6 +796,10 @@ def activate(app):
 
 def deactivate(app):
     tulip.keyboard_callback()
+    try:
+        tulip.touch_callback()
+    except Exception:
+        pass
     tulip.frame_callback()
     if GAME is not None:
         GAME.stop()
@@ -703,11 +814,25 @@ def on_key(code):
         GAME.key(code)
 
 
+def on_touch(up):
+    if GAME is not None:
+        GAME.touch(up)
+
+
 def on_frame(app):
     if not getattr(app, "active", True):
         return
     if GAME is not None:
-        GAME.tick()
+        try:
+            GAME.tick()
+        except Exception as exc:
+            # Last-resort frame guard: stop audio and keep the terminal alive.
+            try:
+                GAME.audio.stop()
+                GAME.message = "FRAME SAFETY STOP: %s" % exc
+                GAME.draw()
+            except Exception:
+                pass
 
 
 def run(app):

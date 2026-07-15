@@ -1,0 +1,17 @@
+v0.1.10 FIXES
+- Restores the missing _user_dir installer helper.
+- Replaces the malformed one-line physical updater helper.
+- Replaces mpremote/raw-REPL transfer with friendly-REPL pyserial transfer.
+- Detects the actual Tulip port using import tulip.
+- Uploads in verified chunks and checks the final byte count.
+- Keeps a HARDWARE_UPDATE_LOG.txt on every attempt.
+- Keeps the command window open on success and failure.
+
+PRESERVED
+- old-terminal touch keypad and touchable numbered choices
+- A-Z/0-9 touch chat input
+- touch Tracker controls
+- four ambient Juno voices and six total Juno voices maximum
+- complete ambient unload while Tracker is open
+- browser MIDI download and local MIDI files
+- anonymous PHP universe and no automatic Tulip World posting

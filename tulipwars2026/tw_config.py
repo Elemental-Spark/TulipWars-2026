@@ -2,7 +2,7 @@
 # A separate /user/tulipwars_user_config.py overrides these values so that
 # Tulip World package updates never erase a player's server configuration.
 SERVER_URL = "https://elementalspark.com/tulipwars2026/api.php"
-GAME_VERSION = "0.1.8"
+GAME_VERSION = "0.1.10"
 GAME_TITLE = "TulipWars 2026"
 WORLD_PACKAGE = "tulipwars2026"
 WORLD_AUTHOR = ""

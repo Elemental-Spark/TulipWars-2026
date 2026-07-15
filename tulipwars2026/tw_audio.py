@@ -4,6 +4,23 @@ import amy
 import synth
 
 
+def _audio_ticks_ms():
+    """Return a usable AMY scheduling clock on hardware, Desktop, and Web."""
+    try:
+        fn = getattr(tulip, "amy_ticks_ms", None)
+        if callable(fn):
+            return int(fn())
+    except Exception:
+        pass
+    try:
+        fn = getattr(tulip, "ticks_ms", None)
+        if callable(fn):
+            return int(fn())
+    except Exception:
+        pass
+    return 0
+
+
 class AmbientEngine:
     """AMY-only procedural LOST SIGNALS-inspired Juno ambience.
 
@@ -132,7 +149,7 @@ class AmbientEngine:
         chord = random.choice(self.CHORDS)
         spread = random.choice([0, 0, 12])
         duration = random.randint(6500, 10500)
-        amy_now = tulip.amy_ticks_ms()
+        amy_now = _audio_ticks_ms()
         for index, interval in enumerate(chord[:self.AMBIENT_VOICES]):
             note = root + interval + (spread if index >= 2 else 0)
             velocity = 0.09 + (random.random() * 0.10)
@@ -150,7 +167,7 @@ class AmbientEngine:
         if self.suspended:
             return
         try:
-            now = tulip.amy_ticks_ms()
+            now = _audio_ticks_ms()
             amy.send(osc=self.SFX_OSC, vel=0, time=now)
             if kind == "laser":
                 amy.send(osc=self.SFX_OSC, wave=amy.SAW_DOWN, note=82, vel=0.22, time=now + 2)

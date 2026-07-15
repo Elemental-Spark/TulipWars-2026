@@ -1,0 +1,9 @@
+1 Status  2 Navigation  3 Market  4 Scan/Combat
+5 Station Chat  6 Element115 Tracker  7 Read-only Tulip World
+R Refresh  0 Back
+
+Combat: F Fire, D Shields, R Retreat
+Tracker: W/S row, [/ ] step, -/+ note, SPACE toggle, ,/. BPM,
+R randomize, P play, M MIDI, E export/download, 0 back
+
+All listed controls are available on the touch terminal.

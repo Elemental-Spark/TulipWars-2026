@@ -1,7 +1,6 @@
 website/data/state.json
 **/local_state.json
 **/ELEMENT115_*.mid
+HARDWARE_UPDATE_LOG.txt
 _GITHUB_WORK/
 *.log
-Thumbs.db
-.DS_Store

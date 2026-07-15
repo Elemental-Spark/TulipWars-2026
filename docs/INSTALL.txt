@@ -1,0 +1,19 @@
+TULIPWARS 2026 v0.1.10 — RELEASE CANDIDATE
+
+WEB/DESKTOP:
+Upload and run INSTALL_OR_UPDATE_TULIPWARS_v0.1.10.py.
+
+PHYSICAL TULIP:
+Open HARDWARE_UPDATE and run UPDATE_PHYSICAL_TULIP_v0.1.10.bat.
+
+Preserved:
+- anonymous ship identity and progress
+- Element115 MIDI exports
+- custom PHP relay configuration
+
+Privacy:
+- no login API
+- no accounts/passwords/email/OAuth
+- no automatic Tulip World posting
+
+Confirm the physical hardware test before public distribution.

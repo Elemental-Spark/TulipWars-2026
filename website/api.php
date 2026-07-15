@@ -332,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         'anonymous_ships'=>count($state['players']),
         'signals_online'=>$online,
         'total_actions'=>(int)$state['total_actions'],
-        'installer'=>'downloads/INSTALL_OR_UPDATE_TULIPWARS_v0.1.8.py',
+        'installer'=>'downloads/INSTALL_OR_UPDATE_TULIPWARS_v0.1.10.py',
     ]);
 }
 
