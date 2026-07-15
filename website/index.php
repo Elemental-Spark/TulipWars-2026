@@ -22,7 +22,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="TulipWars 2026 is an anonymous BBS-style space trading, exploration, combat, chat, and AMY music game for Tulip.">
 <title>TulipWars 2026 v<?=h(TULIPWARS_VERSION)?></title>
-<link rel="stylesheet" href="style.css?v=017">
+<link rel="stylesheet" href="style.css?v=018">
 </head>
 <body>
 <main>
@@ -32,7 +32,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <p class="version">FULL WEB BUILD v<?=h(TULIPWARS_VERSION)?></p>
 <p class="lead">Explore the stars, trade between stations, fight alien signals, talk with other anonymous captains, and compose procedurally generated AMY music from your ship console.</p>
 <div class="actions">
-<a class="button primary" download href="downloads/INSTALL_TULIPWARS_WEB_v0.1.7.py">Download the complete v0.1.7 installer</a>
+<a class="button primary" download href="downloads/INSTALL_OR_UPDATE_TULIPWARS_v0.1.8.py">Download or update to v0.1.8</a>
 <a class="button" href="api.php">View API health</a>
 </div>
 </header>
@@ -50,7 +50,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <ol>
 <li>Open <strong>tulip.computer/run</strong>.</li>
 <li>Click <strong>Show code editor</strong>.</li>
-<li>Upload <code>INSTALL_TULIPWARS_WEB_v0.1.7.py</code>.</li>
+<li>Upload <code>INSTALL_OR_UPDATE_TULIPWARS_v0.1.8.py</code>.</li>
 <li>Select it, load it, and click the green Run button.</li>
 </ol>
 <p class="muted">The single Python file contains the complete game. No terminal typing, TAR extraction, login, password, or clipboard paste is required.</p>
@@ -61,8 +61,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <li>Anonymous persistent ship identity</li>
 <li>Space travel, trading, scans, and alien combat</li>
 <li>Station-local BBS chat and online presence</li>
-<li>AMY-only effects and randomized Juno ambience</li>
-<li>Element115 Tracker with MIDI export</li>
+<li>Hardware-safe AMY audio with a six-Juno-voice hard cap</li>
+<li>Element115 Tracker with local export and Web browser MIDI download</li>
 <li>Read-only Tulip World access—no automatic posts</li>
 </ul>
 </div>

@@ -94,6 +94,12 @@ class TulipWarsGame:
         tulip.tfb_start()
         tulip.tfb_font(0)
         tulip.bg_clear(self.BG)
+        # Reactivating the app always returns to the command deck. This avoids
+        # silently reallocating ambience behind a tracker screen after another
+        # Tulip app temporarily deactivated TulipWars.
+        if self.screen == "tracker":
+            self.tracker.release()
+            self.screen = "home"
         self.audio.start()
         if self.client.configured():
             self.connect()
@@ -104,6 +110,23 @@ class TulipWarsGame:
     def stop(self):
         self.tracker.release()
         self.audio.stop()
+
+    def _enter_tracker(self):
+        # The Element115 console gets exclusive ownership of the managed Juno
+        # pool. Merely opening the tracker unloads the ambient PatchSynth; it is
+        # not left allocated silently while the grid is being edited.
+        self.audio.suspend()
+        self.tracker.release()
+        self.screen = "tracker"
+        self.message = "AMBIENT JUNO UNLOADED // TRACKER VOICE CAP: 6"
+
+    def _leave_tracker(self):
+        # Release all tracker voices first, then rebuild the procedural ambient
+        # synth. Ambient notes do not begin until its delayed next chord.
+        self.tracker.release()
+        self.screen = "home"
+        self.audio.resume()
+        self.message = "TRACKER UNLOADED // PROCEDURAL AMBIENCE RESTORED"
 
     def connect(self):
         self.message = "CONTACTING ANONYMOUS RELAY..."
@@ -360,15 +383,16 @@ class TulipWarsGame:
             "YES" if self.tracker.playing else "NO",
             "YES" if self.tracker.midi_thru else "NO",
         ), self.BRIGHT)
-        self._line(5, "THE LOST SIGNAL CHANGES EVERY TIME THE GRID IS RANDOMIZED.", self.DIM)
+        self._line(5, "AMBIENT UNLOADED // HARD CAP: 6 SIMULTANEOUS JUNO NOTES", self.GOOD)
         for index, row in enumerate(self.tracker.rows_for_display()):
             self._line(8 + index, row, self.BRIGHT if index == self.tracker.row else self.FG)
         self._line(18, "CURSOR +/@   NOTE X   PLAYHEAD :/*", self.DIM)
         self._line(20, "[W/S] ROW   [[/]] STEP   [-/+] NOTE   [SPACE] TOGGLE")
         self._line(21, "[R] RANDOMIZE   [P] PLAY/STOP   [M] MIDI OUT   [E] EXPORT .MID")
-        self._line(22, "[,] BPM -/+  //  EXPORTED MIDI STAYS INSIDE THIS PACKAGE FOLDER")
+        self._line(22, "[,] BPM -/+  //  WEB DOWNLOADS; HARDWARE SAVES LOCALLY")
         if self.tracker.last_export:
-            self._line(25, "LAST EXPORT: %s" % self.tracker.last_export, self.GOOD)
+            status = "BROWSER DOWNLOADED" if self.tracker.last_browser_download else "SAVED LOCALLY"
+            self._line(25, "LAST EXPORT: %s // %s" % (self.tracker.last_export, status), self.GOOD)
         self._footer("[0] BACK   AMY AUDIO ONLY - NO SAMPLES")
 
     def draw_world(self):
@@ -396,10 +420,10 @@ class TulipWarsGame:
             self._chat_key(code)
             return
         if code in (48,):  # 0
-            if self.screen == "tracker" and self.tracker.playing:
-                self.tracker.stop()
-                self.audio.resume()
-            self.screen = "home"
+            if self.screen == "tracker":
+                self._leave_tracker()
+            else:
+                self.screen = "home"
             self.draw()
             return
         try:
@@ -414,7 +438,7 @@ class TulipWarsGame:
             if upper == "R":
                 self.connect()
             elif char == "6":
-                self.screen = "tracker"
+                self._enter_tracker()
                 self.draw()
             return
         if self.screen == "home":
@@ -447,7 +471,7 @@ class TulipWarsGame:
             self.screen = "chat"
             self._call(self.client.chat_list)
         elif char == "6":
-            self.screen = "tracker"
+            self._enter_tracker()
         elif char == "7":
             self.screen = "world"
         elif upper == "R":
@@ -559,20 +583,19 @@ class TulipWarsGame:
         elif upper == "P":
             if self.tracker.playing:
                 self.tracker.stop()
-                self.audio.resume()
             else:
-                self.audio.pause()
                 self.tracker.start()
         elif upper == "M":
             self.tracker.midi_thru = not self.tracker.midi_thru
         elif upper == "E":
             try:
-                path = self.tracker.export()
-                self.message = "MIDI EXPORTED: %s" % path
-                self.audio.sfx("ok")
+                path, downloaded = self.tracker.export()
+                if downloaded:
+                    self.message = "MIDI EXPORTED AND DOWNLOADED: %s" % path
+                else:
+                    self.message = "MIDI EXPORTED LOCALLY: %s" % path
             except Exception as exc:
                 self.message = "MIDI EXPORT FAILED: %s" % exc
-                self.audio.sfx("damage")
         else:
             redraw = False
         if redraw:
@@ -595,11 +618,14 @@ class TulipWarsGame:
 
     def tick(self):
         now = tulip.ticks_ms()
-        if self.screen == "tracker" and self.tracker.playing:
-            advanced = self.tracker.tick(now)
-            if advanced and now - self.last_tracker_redraw > 40:
-                self.last_tracker_redraw = now
-                self.draw()
+        if self.screen == "tracker":
+            # AmbientEngine is fully released for the entire tracker screen,
+            # even while playback is stopped and the user is only editing.
+            if self.tracker.playing:
+                advanced = self.tracker.tick(now)
+                if advanced and now - self.last_tracker_redraw > 40:
+                    self.last_tracker_redraw = now
+                    self.draw()
         else:
             self.audio.tick(now)
 

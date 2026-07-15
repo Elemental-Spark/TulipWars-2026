@@ -5,7 +5,16 @@ import synth
 
 
 class AmbientEngine:
-    """AMY-only procedural LOST SIGNALS-inspired Juno ambience."""
+    """AMY-only procedural LOST SIGNALS-inspired Juno ambience.
+
+    Hardware rule: never allocate more than six Juno voices. The ambient bed
+    deliberately uses only four, leaving headroom for Tulip itself and for the
+    short single-oscillator interface effects.
+    """
+
+    MAX_JUNO_VOICES = 6
+    AMBIENT_VOICES = 4
+    SFX_OSC = 119
 
     JUNO_PATCHES = [0, 1, 5, 11, 18, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120]
     ROOTS = [34, 36, 38, 41, 43, 45]
@@ -24,36 +33,14 @@ class AmbientEngine:
         self.pending_off = []
         self.chord_count = 0
         self.enabled = True
+        self.suspended = False
 
-    def _new_synth(self):
-        if self.synth is not None:
-            try:
-                self.synth.release()
-            except Exception:
-                pass
-        self.patch = random.choice(self.JUNO_PATCHES)
+    def _configure_fx(self):
         try:
-            self.synth = synth.PatchSynth(num_voices=6, patch=self.patch)
-        except Exception:
-            self.synth = None
-
-    def start(self):
-        self.enabled = True
-        try:
-            amy.reverb(0.72)
-            amy.echo(level=0.22, delay_ms=random.choice([620, 740, 860, 980]), feedback=0.48)
+            amy.reverb(0.62)
+            amy.echo(level=0.16, delay_ms=random.choice([620, 740, 860, 980]), feedback=0.38)
         except Exception:
             pass
-        self._new_synth()
-        self.next_chord_ms = tulip.ticks_ms() + 600
-
-    def pause(self):
-        self.enabled = False
-        self._all_off()
-
-    def resume(self):
-        self.enabled = True
-        self.next_chord_ms = tulip.ticks_ms() + 300
 
     def _all_off(self):
         if self.synth is not None:
@@ -63,8 +50,7 @@ class AmbientEngine:
                 pass
         self.pending_off = []
 
-    def stop(self):
-        self.enabled = False
+    def _release_synth(self):
         self._all_off()
         if self.synth is not None:
             try:
@@ -72,11 +58,53 @@ class AmbientEngine:
             except Exception:
                 pass
         self.synth = None
+
+    def _new_synth(self):
+        # Release the old Juno allocation before requesting another one. This is
+        # essential on Tulip hardware, where overlapping PatchSynth allocations
+        # can trigger AMY overload warning tones.
+        self._release_synth()
+        self.patch = random.choice(self.JUNO_PATCHES)
+        try:
+            self.synth = synth.PatchSynth(num_voices=self.AMBIENT_VOICES, patch=self.patch)
+        except Exception:
+            self.synth = None
+
+    def start(self):
+        self.enabled = True
+        self.suspended = False
+        self._configure_fx()
+        self._new_synth()
+        self.next_chord_ms = tulip.ticks_ms() + 600
+
+    def suspend(self):
+        """Completely unload the ambient Juno while another console owns AMY."""
+        self.enabled = False
+        self.suspended = True
+        self._release_synth()
+
+    def pause(self):
+        # Kept as a compatibility alias for older callers.
+        self.suspend()
+
+    def resume(self):
+        self.enabled = True
+        self.suspended = False
+        self._configure_fx()
+        if self.synth is None:
+            self._new_synth()
+        self.next_chord_ms = tulip.ticks_ms() + 700
+
+    def stop(self):
+        self.enabled = False
+        self.suspended = False
+        self._release_synth()
         # Do not reset AMY globally; another Tulip app may be sounding.
 
     def tick(self, now_ms):
-        if self.synth is None or not self.enabled:
+        if self.synth is None or not self.enabled or self.suspended:
             return
+
         keep = []
         for off_ms, note in self.pending_off:
             if now_ms >= off_ms:
@@ -92,43 +120,51 @@ class AmbientEngine:
             return
 
         self.chord_count += 1
-        if self.chord_count % random.choice([3, 4, 5]) == 0:
+        if self.chord_count % random.choice([4, 5, 6]) == 0:
             self._new_synth()
             if self.synth is None:
                 return
 
+        # Reuse the same four managed voices instead of allowing long Juno
+        # releases from one chord to overlap a second chord.
+        self._all_off()
         root = random.choice(self.ROOTS)
         chord = random.choice(self.CHORDS)
         spread = random.choice([0, 0, 12])
-        duration = random.randint(6500, 12000)
+        duration = random.randint(6500, 10500)
         amy_now = tulip.amy_ticks_ms()
-        for index, interval in enumerate(chord):
+        for index, interval in enumerate(chord[:self.AMBIENT_VOICES]):
             note = root + interval + (spread if index >= 2 else 0)
-            velocity = 0.10 + (random.random() * 0.12)
+            velocity = 0.09 + (random.random() * 0.10)
             try:
-                self.synth.note_on(note, velocity, time=amy_now + index * random.randint(120, 420))
-                self.pending_off.append((now_ms + duration + index * 150, note))
+                self.synth.note_on(note, velocity, time=amy_now + index * random.randint(120, 340))
+                self.pending_off.append((now_ms + duration + index * 120, note))
             except Exception:
                 pass
-        self.next_chord_ms = now_ms + random.randint(8500, 15500)
+        self.next_chord_ms = now_ms + random.randint(9000, 15000)
 
     def sfx(self, kind="ok"):
-        # High oscillator IDs avoid the managed Juno voice pool in normal use.
+        # One reusable oscillator prevents interface sounds from accumulating.
+        # Tracker mode intentionally skips these effects to keep its six Juno
+        # voices exclusive on hardware.
+        if self.suspended:
+            return
         try:
             now = tulip.amy_ticks_ms()
+            amy.send(osc=self.SFX_OSC, vel=0, time=now)
             if kind == "laser":
-                amy.send(osc=116, wave=amy.SAW_DOWN, note=82, vel=0.28, time=now)
-                amy.send(osc=116, note=55, time=now + 90)
-                amy.send(osc=116, vel=0, time=now + 220)
+                amy.send(osc=self.SFX_OSC, wave=amy.SAW_DOWN, note=82, vel=0.22, time=now + 2)
+                amy.send(osc=self.SFX_OSC, note=55, time=now + 80)
+                amy.send(osc=self.SFX_OSC, vel=0, time=now + 190)
             elif kind == "damage":
-                amy.send(osc=117, wave=amy.NOISE, vel=0.24, time=now)
-                amy.send(osc=117, vel=0, time=now + 240)
+                amy.send(osc=self.SFX_OSC, wave=amy.NOISE, vel=0.18, time=now + 2)
+                amy.send(osc=self.SFX_OSC, vel=0, time=now + 180)
             elif kind == "warp":
-                amy.send(osc=118, wave=amy.SINE, note=42, vel=0.22, time=now)
-                amy.send(osc=118, note=78, time=now + 320)
-                amy.send(osc=118, vel=0, time=now + 700)
+                amy.send(osc=self.SFX_OSC, wave=amy.SINE, note=42, vel=0.18, time=now + 2)
+                amy.send(osc=self.SFX_OSC, note=76, time=now + 260)
+                amy.send(osc=self.SFX_OSC, vel=0, time=now + 580)
             else:
-                amy.send(osc=119, wave=amy.SINE, note=76, vel=0.18, time=now)
-                amy.send(osc=119, vel=0, time=now + 120)
+                amy.send(osc=self.SFX_OSC, wave=amy.SINE, note=76, vel=0.13, time=now + 2)
+                amy.send(osc=self.SFX_OSC, vel=0, time=now + 95)
         except Exception:
             pass

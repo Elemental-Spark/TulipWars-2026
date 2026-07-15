@@ -1,33 +1,51 @@
 # TulipWars 2026
 
-TulipWars 2026 is an anonymous BBS-style space game for Tulip Web, Tulip Desktop, and Tulip CC hardware. Explore nine star systems, trade commodities, scan deep space, fight alien signals, meet anonymous captains at stations, and create procedural music from the Element115 Tracker.
+TulipWars 2026 is an anonymous BBS-style space game for Tulip Web, Desktop, and physical Tulip CC hardware. Explore star systems, trade commodities, scan deep-space signals, fight alien ships, meet anonymous captains at stations, and compose procedural music from an Element115 ship tracker.
 
 ## Current release
 
-**v0.1.7 — confirmed working Tulip Web baseline**
+**v0.1.8 — Hardware Audio + MIDI Download Update**
 
-The readable game source, complete one-file installer, PHP 8.4 website/API, documentation, and release archives are included here.
+## v0.1.8 highlights
 
-## Features
+- Maximum six managed Juno voices throughout the game
+- Procedural ambience uses four Juno voices and does not overlap chords
+- Opening Element115 Tracker fully releases the background synth
+- Dense eight-row tracker patterns emit at most six simultaneous notes
+- Leaving Tracker releases its synth before ambience is restored
+- Tulip Web exports trigger a real browser `.mid` download
+- Physical Tulip/Desktop exports remain stored locally
 
-- Anonymous persistent ship identity with no accounts or login API
-- Nine systems, fuel-based travel, random events, and dynamic markets
-- Cargo, credits, hull, shields, scans, salvage, and alien combat
-- Anonymous station-local BBS chat and online presence
-- 100% AMY-synthesized effects and randomized Juno ambience
-- Element115 Tracker with AMY playback and Standard MIDI File export
-- Read-only Tulip World lounge
-- No automatic Tulip World messages, uploads, or gameplay spam
+## Core features
 
-## Tulip Web installation
+- Anonymous persistent captain and ship identity
+- No accounts, passwords, email, OAuth, cookies, or login API
+- Nine explorable star systems
+- Travel, fuel, scans, salvage, alien encounters, and turn-based combat
+- Dynamic station commodity markets
+- Anonymous station-local BBS chat and docked-player presence
+- AMY-only procedural ambience and sound effects
+- Element115 8x16 tracker with MIDI output and Standard MIDI File export
+- Read-only Tulip World lounge with no automatic posts
 
-1. Download `INSTALL_TULIPWARS_WEB_v0.1.7.py`.
+## Install or update
+
+1. Download `INSTALL_OR_UPDATE_TULIPWARS_v0.1.8.py`.
 2. Open `https://tulip.computer/run/`.
-3. Show the code editor and upload the installer.
-4. Load it and click the green Run button.
+3. Click **Show code editor**.
+4. Upload the installer, select it, and load it.
+5. Click the green **Run** button.
 
-## Self-hosted website/API
+The one-file updater preserves `local_state.json`, every `ELEMENT115_*.mid` file, and an existing custom relay configuration.
 
-Upload the contents of `website/` to `/tulipwars2026/` on a PHP 8.4-compatible host. Preserve the live `website/data/state.json`; it is excluded from this repository and all release packages.
+## Repository layout
 
-The API remains intentionally anonymous and flat-file based. It does not use passwords, email, OAuth, cookies, account profiles, or a login API.
+- `INSTALL_OR_UPDATE_TULIPWARS_v0.1.8.py` — complete one-file installer/updater
+- `tulipwars2026/` — readable Tulip/MicroPython source
+- `website/` — PHP anonymous universe API and dashboard
+- `docs/` — installation, controls, changes, and test notes
+- `release-assets/` — full, public-update, and website-sync archives
+
+## Privacy
+
+Runtime state is deliberately excluded from GitHub: `website/data/state.json`, `local_state.json`, and exported `ELEMENT115_*.mid` files are never committed. TulipWars never calls `world.post_message()` and never automatically publishes gameplay or files to Tulip World.

@@ -62,3 +62,43 @@ def export_midi(pattern, notes, bpm, filename, program=0):
         handle.write(header)
         handle.write(chunk)
     return filename
+
+
+def _base64_file(filename):
+    try:
+        import ubinascii as binascii
+    except Exception:
+        import binascii
+    with open(filename, "rb") as handle:
+        data = handle.read()
+    # MicroPython's b2a_base64 is most portable with RFC-sized chunks.
+    encoded = []
+    for offset in range(0, len(data), 57):
+        part = binascii.b2a_base64(data[offset:offset + 57])
+        if not isinstance(part, str):
+            part = part.decode()
+        encoded.append(part.strip())
+    return "".join(encoded)
+
+
+def download_in_browser(filename):
+    """Start a real browser download in Tulip Web; no-op on hardware/Desktop."""
+    try:
+        import tulip
+        if tulip.board() not in ("WEB", "AMYBOARD_WEB"):
+            return False
+        import js
+        name = filename.rsplit("/", 1)[-1]
+        href = "data:audio/midi;base64," + _base64_file(filename)
+        anchor = js.document.createElement("a")
+        anchor.setAttribute("href", href)
+        anchor.setAttribute("download", name)
+        anchor.setAttribute("style", "display:none")
+        js.document.body.appendChild(anchor)
+        anchor.click()
+        js.document.body.removeChild(anchor)
+        return True
+    except Exception:
+        # The local .mid remains safely exported even if a browser blocks the
+        # download gesture or changes its JavaScript bridge.
+        return False

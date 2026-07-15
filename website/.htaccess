@@ -1,7 +1,7 @@
 Options -Indexes
 DirectoryIndex index.php
 
-# Obsolete patch-era endpoints and archives must never be served. v0.1.7 uses
+# Obsolete patch-era endpoints and archives must never be served. v0.1.8 uses
 # one complete Python installer and the normal anonymous game API only.
 <FilesMatch "^(download\.php|tulipwars_files\.php|.*\.(tar|tar\.gz|tgz))$">
     Require all denied

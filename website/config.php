@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-const TULIPWARS_VERSION = '0.1.7';
-const TULIPWARS_API_REVISION = '2026-07-15-v0.1.7-full-sync';
+const TULIPWARS_VERSION = '0.1.8';
+const TULIPWARS_API_REVISION = '2026-07-15-v0.1.8-audio-midi-sync';
 const TULIPWARS_STATE_FILE = __DIR__ . '/data/state.json';
 const TULIPWARS_CHAT_LIMIT = 100;
 const TULIPWARS_ONLINE_SECONDS = 120;
