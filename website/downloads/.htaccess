@@ -2,3 +2,10 @@ Options -Indexes
 <FilesMatch "\.(tar|tar\.gz|tgz)$">
     Require all denied
 </FilesMatch>
+<IfModule mod_headers.c>
+    <FilesMatch "\.py$">
+        Header set Content-Type "text/x-python; charset=utf-8"
+        Header set Content-Disposition "attachment"
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>

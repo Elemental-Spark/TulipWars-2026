@@ -4,9 +4,12 @@ require __DIR__ . '/config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Cache-Control: no-store');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -21,15 +24,15 @@ function respond(array $payload, int $status = 200): never {
 
 function systems(): array {
     return [
-        ['id'=>'SOLACE',   'name'=>'Solace Station',   'type'=>'HUB',       'danger'=>1, 'x'=>0,  'y'=>0],
-        ['id'=>'MOSS',     'name'=>'Mosswater Relay',  'type'=>'GARDEN',    'danger'=>1, 'x'=>3,  'y'=>2],
-        ['id'=>'VEGA04',   'name'=>'Vega-04 Exchange', 'type'=>'TRADE',     'danger'=>2, 'x'=>7,  'y'=>1],
-        ['id'=>'KHEPRI',   'name'=>'Khepri Outpost',   'type'=>'MINING',    'danger'=>3, 'x'=>9,  'y'=>6],
-        ['id'=>'FAULT10',  'name'=>'Fault City GOTO10','type'=>'ANOMALY',   'danger'=>5, 'x'=>4,  'y'=>10],
-        ['id'=>'CLEAN',    'name'=>'The Clean Machine','type'=>'CITYSHIP',  'danger'=>4, 'x'=>12, 'y'=>8],
-        ['id'=>'SHEPHERD', 'name'=>'Shepherd Array',   'type'=>'SIGNAL',    'danger'=>5, 'x'=>15, 'y'=>2],
-        ['id'=>'ELANOR',   'name'=>'Elanor Deep Field','type'=>'UNKNOWN',   'danger'=>5, 'x'=>18, 'y'=>11],
-        ['id'=>'TULIP',    'name'=>'Tulip World Gate', 'type'=>'COMMUNITY', 'danger'=>2, 'x'=>2,  'y'=>7],
+        ['id'=>'SOLACE',   'name'=>'Solace Station',    'type'=>'HUB',       'danger'=>1, 'x'=>0,  'y'=>0],
+        ['id'=>'MOSS',     'name'=>'Mosswater Relay',   'type'=>'GARDEN',    'danger'=>1, 'x'=>3,  'y'=>2],
+        ['id'=>'VEGA04',   'name'=>'Vega-04 Exchange',  'type'=>'TRADE',     'danger'=>2, 'x'=>7,  'y'=>1],
+        ['id'=>'KHEPRI',   'name'=>'Khepri Outpost',    'type'=>'MINING',    'danger'=>3, 'x'=>9,  'y'=>6],
+        ['id'=>'FAULT10',  'name'=>'Fault City GOTO10', 'type'=>'ANOMALY',   'danger'=>5, 'x'=>4,  'y'=>10],
+        ['id'=>'CLEAN',    'name'=>'The Clean Machine', 'type'=>'CITYSHIP',  'danger'=>4, 'x'=>12, 'y'=>8],
+        ['id'=>'SHEPHERD', 'name'=>'Shepherd Array',    'type'=>'SIGNAL',    'danger'=>5, 'x'=>15, 'y'=>2],
+        ['id'=>'ELANOR',   'name'=>'Elanor Deep Field', 'type'=>'UNKNOWN',   'danger'=>5, 'x'=>18, 'y'=>11],
+        ['id'=>'TULIP',    'name'=>'Tulip World Gate',  'type'=>'COMMUNITY', 'danger'=>2, 'x'=>2,  'y'=>7],
     ];
 }
 
@@ -45,16 +48,12 @@ function commodities(): array {
 }
 
 function system_by_id(string $id): ?array {
-    foreach (systems() as $system) {
-        if ($system['id'] === $id) return $system;
-    }
+    foreach (systems() as $system) if ($system['id'] === $id) return $system;
     return null;
 }
 
 function commodity_by_id(string $id): ?array {
-    foreach (commodities() as $commodity) {
-        if ($commodity['id'] === $id) return $commodity;
-    }
+    foreach (commodities() as $commodity) if ($commodity['id'] === $id) return $commodity;
     return null;
 }
 
@@ -62,6 +61,11 @@ function clean_id(mixed $value): string {
     $value = strtoupper((string)$value);
     $value = preg_replace('/[^A-Z0-9_-]/', '', $value) ?? '';
     return substr($value, 0, 48);
+}
+
+function clean_version(mixed $value): string {
+    $value = preg_replace('/[^0-9A-Za-z._-]/', '', (string)$value) ?? '';
+    return substr($value, 0, 24);
 }
 
 function clean_callsign(mixed $value): string {
@@ -77,14 +81,104 @@ function clean_message(mixed $value): string {
     return trim(substr($value, 0, 240));
 }
 
+function default_cargo(): array {
+    return ['water'=>3, 'food'=>3, 'ore'=>0, 'circuits'=>0, 'signals'=>0, 'artifact'=>0];
+}
+
 function initial_state(): array {
     return [
         'version'=>TULIPWARS_VERSION,
+        'api_revision'=>TULIPWARS_API_REVISION,
         'created_at'=>time(),
+        'updated_at'=>time(),
         'players'=>[],
         'chat'=>[],
         'total_actions'=>0,
     ];
+}
+
+function normalize_player(array $player, string $deviceId = ''): array {
+    $cargo = default_cargo();
+    if (isset($player['cargo']) && is_array($player['cargo'])) {
+        foreach ($cargo as $id=>$default) $cargo[$id] = max(0, (int)($player['cargo'][$id] ?? $default));
+    }
+    $system = clean_id($player['system'] ?? 'SOLACE');
+    if (system_by_id($system) === null) $system = 'SOLACE';
+    $battle = isset($player['battle']) && is_array($player['battle']) ? $player['battle'] : null;
+    if (is_array($battle)) {
+        $battle = [
+            'active'=>(bool)($battle['active'] ?? false),
+            'enemy_name'=>clean_callsign($battle['enemy_name'] ?? 'UNKNOWN CONTACT'),
+            'enemy_hull'=>max(0, (int)($battle['enemy_hull'] ?? 0)),
+            'enemy_max_hull'=>max(1, (int)($battle['enemy_max_hull'] ?? 1)),
+            'log'=>clean_message($battle['log'] ?? ''),
+        ];
+    }
+    $suffix = $deviceId !== '' ? substr($deviceId, -4) : '0000';
+    return [
+        'callsign'=>clean_callsign($player['callsign'] ?? 'ANON'),
+        'ship_name'=>substr(trim((string)($player['ship_name'] ?? ('Lost Tulip ' . $suffix))), 0, 40),
+        'system'=>$system,
+        'credits'=>max(0, (int)($player['credits'] ?? 1000)),
+        'fuel'=>max(0, min(100, (int)($player['fuel'] ?? 100))),
+        'hull'=>max(0, min(100, (int)($player['hull'] ?? 100))),
+        'shield'=>max(0, min(100, (int)($player['shield'] ?? 100))),
+        'cargo'=>$cargo,
+        'battle'=>$battle,
+        'created_at'=>max(0, (int)($player['created_at'] ?? time())),
+        'last_seen'=>max(0, (int)($player['last_seen'] ?? time())),
+        'activity'=>substr(trim((string)($player['activity'] ?? 'DOCKED')), 0, 40),
+        'client_version'=>clean_version($player['client_version'] ?? ''),
+    ];
+}
+
+function migrate_state(mixed $decoded): array {
+    $state = is_array($decoded) ? $decoded : initial_state();
+    $state['version'] = TULIPWARS_VERSION;
+    $state['api_revision'] = TULIPWARS_API_REVISION;
+    $state['created_at'] = max(0, (int)($state['created_at'] ?? time()));
+    $state['updated_at'] = max(0, (int)($state['updated_at'] ?? time()));
+    $state['total_actions'] = max(0, (int)($state['total_actions'] ?? 0));
+    if (!isset($state['players']) || !is_array($state['players'])) $state['players'] = [];
+    if (!isset($state['chat']) || !is_array($state['chat'])) $state['chat'] = [];
+    foreach ($state['players'] as $id=>$player) {
+        if (!is_array($player)) {
+            unset($state['players'][$id]);
+            continue;
+        }
+        $state['players'][$id] = normalize_player($player, (string)$id);
+    }
+    foreach ($state['chat'] as $systemId=>$messages) {
+        if (!is_array($messages)) {
+            $state['chat'][$systemId] = [];
+            continue;
+        }
+        $cleaned = [];
+        foreach (array_slice($messages, -TULIPWARS_CHAT_LIMIT) as $message) {
+            if (!is_array($message)) continue;
+            $text = clean_message($message['message'] ?? '');
+            if ($text === '') continue;
+            $cleaned[] = [
+                'callsign'=>clean_callsign($message['callsign'] ?? 'ANON'),
+                'message'=>$text,
+                'time'=>max(0, (int)($message['time'] ?? time())),
+            ];
+        }
+        $state['chat'][$systemId] = $cleaned;
+    }
+    return $state;
+}
+
+function read_state_snapshot(): array {
+    if (!is_file(TULIPWARS_STATE_FILE)) return initial_state();
+    $handle = fopen(TULIPWARS_STATE_FILE, 'r');
+    if ($handle === false) return initial_state();
+    flock($handle, LOCK_SH);
+    $raw = stream_get_contents($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+    $decoded = is_string($raw) && trim($raw) !== '' ? json_decode($raw, true) : null;
+    return migrate_state($decoded);
 }
 
 function mutate_state(callable $callback): array {
@@ -100,22 +194,35 @@ function mutate_state(callable $callback): array {
     }
     rewind($handle);
     $raw = stream_get_contents($handle);
-    $state = is_string($raw) && trim($raw) !== '' ? json_decode($raw, true) : null;
-    if (!is_array($state)) $state = initial_state();
+    $decoded = is_string($raw) && trim($raw) !== '' ? json_decode($raw, true) : null;
+    $state = migrate_state($decoded);
     $result = $callback($state);
-    $state['total_actions'] = (int)($state['total_actions'] ?? 0) + 1;
+    $state['version'] = TULIPWARS_VERSION;
+    $state['api_revision'] = TULIPWARS_API_REVISION;
+    $state['updated_at'] = time();
+    $state['total_actions'] = (int)$state['total_actions'] + 1;
+    $encoded = json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (!is_string($encoded)) {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        respond(['ok'=>false, 'error'=>'Could not encode universe state'], 500);
+    }
     rewind($handle);
     ftruncate($handle, 0);
-    fwrite($handle, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    if (fwrite($handle, $encoded) === false) {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        respond(['ok'=>false, 'error'=>'Could not save universe state'], 500);
+    }
     fflush($handle);
     flock($handle, LOCK_UN);
     fclose($handle);
     return $result;
 }
 
-function ensure_player(array &$state, string $deviceId, string $callsign): array {
+function ensure_player(array &$state, string $deviceId, string $callsign, string $clientVersion): void {
     if (!isset($state['players'][$deviceId]) || !is_array($state['players'][$deviceId])) {
-        $state['players'][$deviceId] = [
+        $state['players'][$deviceId] = normalize_player([
             'callsign'=>$callsign,
             'ship_name'=>'Lost Tulip ' . substr($deviceId, -4),
             'system'=>'SOLACE',
@@ -123,16 +230,19 @@ function ensure_player(array &$state, string $deviceId, string $callsign): array
             'fuel'=>100,
             'hull'=>100,
             'shield'=>100,
-            'cargo'=>['water'=>3, 'food'=>3, 'ore'=>0, 'circuits'=>0, 'signals'=>0, 'artifact'=>0],
+            'cargo'=>default_cargo(),
             'battle'=>null,
             'created_at'=>time(),
             'last_seen'=>time(),
             'activity'=>'DOCKED',
-        ];
+            'client_version'=>$clientVersion,
+        ], $deviceId);
+    } else {
+        $state['players'][$deviceId] = normalize_player($state['players'][$deviceId], $deviceId);
     }
     $state['players'][$deviceId]['callsign'] = $callsign;
     $state['players'][$deviceId]['last_seen'] = time();
-    return $state['players'][$deviceId];
+    $state['players'][$deviceId]['client_version'] = $clientVersion;
 }
 
 function public_player(array $player): array {
@@ -153,14 +263,9 @@ function public_player(array $player): array {
 function online_at(array $state, string $systemId, string $excludeId = ''): array {
     $online = [];
     $minimum = time() - TULIPWARS_ONLINE_SECONDS;
-    foreach (($state['players'] ?? []) as $id=>$player) {
-        if ($id === $excludeId) continue;
-        if (($player['system'] ?? '') !== $systemId) continue;
-        if ((int)($player['last_seen'] ?? 0) < $minimum) continue;
-        $online[] = [
-            'callsign'=>$player['callsign'] ?? 'ANON',
-            'activity'=>$player['activity'] ?? 'DOCKED',
-        ];
+    foreach ($state['players'] as $id=>$player) {
+        if ($id === $excludeId || ($player['system'] ?? '') !== $systemId || (int)($player['last_seen'] ?? 0) < $minimum) continue;
+        $online[] = ['callsign'=>$player['callsign'] ?? 'ANON', 'activity'=>$player['activity'] ?? 'DOCKED'];
     }
     return array_slice($online, 0, 20);
 }
@@ -183,6 +288,7 @@ function packet(array $state, string $deviceId, string $message = ''): array {
     return [
         'ok'=>true,
         'version'=>TULIPWARS_VERSION,
+        'api_revision'=>TULIPWARS_API_REVISION,
         'message'=>$message,
         'player'=>public_player($player),
         'universe'=>[
@@ -207,27 +313,43 @@ function apply_damage(array &$player, int $damage): int {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $state = read_state_snapshot();
+    $minimum = time() - TULIPWARS_ONLINE_SECONDS;
+    $online = 0;
+    foreach ($state['players'] as $player) if ((int)($player['last_seen'] ?? 0) >= $minimum) $online++;
     respond([
         'ok'=>true,
         'game'=>'TulipWars 2026',
         'version'=>TULIPWARS_VERSION,
+        'api_revision'=>TULIPWARS_API_REVISION,
         'mode'=>'anonymous-flat-file',
         'login_api'=>false,
+        'accounts'=>false,
+        'cookies'=>false,
         'tulip_world_auto_posts'=>false,
+        'systems'=>count(systems()),
+        'commodities'=>count(commodities()),
+        'anonymous_ships'=>count($state['players']),
+        'signals_online'=>$online,
+        'total_actions'=>(int)$state['total_actions'],
+        'installer'=>'downloads/INSTALL_TULIPWARS_WEB_v0.1.7.py',
     ]);
 }
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(['ok'=>false, 'error'=>'Use GET or POST'], 405);
+if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 16384) respond(['ok'=>false, 'error'=>'Request is too large'], 413);
 
 $raw = file_get_contents('php://input');
 $input = json_decode(is_string($raw) ? $raw : '', true);
 if (!is_array($input)) $input = $_POST;
-$action = strtolower((string)($input['action'] ?? ''));
+$action = strtolower(substr((string)($input['action'] ?? ''), 0, 32));
 $deviceId = clean_id($input['device_id'] ?? '');
 $callsign = clean_callsign($input['callsign'] ?? 'ANON');
-
+$clientVersion = clean_version($input['version'] ?? '');
 if ($deviceId === '' || strlen($deviceId) < 6) respond(['ok'=>false, 'error'=>'Anonymous device_id is required'], 400);
 
-$result = mutate_state(function(array &$state) use ($action, $deviceId, $callsign, $input): array {
-    ensure_player($state, $deviceId, $callsign);
+$result = mutate_state(function(array &$state) use ($action, $deviceId, $callsign, $clientVersion, $input): array {
+    ensure_player($state, $deviceId, $callsign, $clientVersion);
     $player =& $state['players'][$deviceId];
 
     switch ($action) {
@@ -245,8 +367,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
             return packet($state, $deviceId, 'MARKET PRICES UPDATED');
 
         case 'trade':
-            $commodityId = clean_id($input['commodity'] ?? '');
-            $commodityId = strtolower($commodityId);
+            $commodityId = strtolower(clean_id($input['commodity'] ?? ''));
             $commodity = commodity_by_id($commodityId);
             if ($commodity === null) return ['ok'=>false, 'error'=>'Unknown commodity'];
             $side = strtolower((string)($input['side'] ?? ''));
@@ -259,7 +380,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
             if ($side === 'buy') {
                 $cost = $price['buy'] * $quantity;
                 if ($player['credits'] < $cost) return ['ok'=>false, 'error'=>'Not enough credits'];
-                if (array_sum($player['cargo']) + $quantity > 60) return ['ok'=>false, 'error'=>'Cargo hold is full'];
+                if (array_sum($player['cargo']) + $quantity > TULIPWARS_CARGO_CAPACITY) return ['ok'=>false, 'error'=>'Cargo hold is full'];
                 $player['credits'] -= $cost;
                 $player['cargo'][$commodityId] = $held + $quantity;
                 $message = 'BOUGHT ' . $quantity . ' ' . strtoupper($commodityId);
@@ -268,9 +389,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
                 $player['cargo'][$commodityId] = $held - $quantity;
                 $player['credits'] += $price['sell'] * $quantity;
                 $message = 'SOLD ' . $quantity . ' ' . strtoupper($commodityId);
-            } else {
-                return ['ok'=>false, 'error'=>'Trade side must be buy or sell'];
-            }
+            } else return ['ok'=>false, 'error'=>'Trade side must be buy or sell'];
             $player['activity'] = 'TRADING';
             return packet($state, $deviceId, $message);
 
@@ -291,13 +410,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
             $event = ['title'=>'QUIET ARRIVAL', 'text'=>'Stars bend, then settle around the station.'];
             if ($roll <= 18) {
                 $enemyHull = 55 + ($to['danger'] * 12);
-                $player['battle'] = [
-                    'active'=>true,
-                    'enemy_name'=>['VOID MITE','ANOMALY SKIFF','SHEPHERD DRONE','GLASS RAIDER'][random_int(0,3)],
-                    'enemy_hull'=>$enemyHull,
-                    'enemy_max_hull'=>$enemyHull,
-                    'log'=>'HOSTILE SIGNAL FOLLOWED YOU THROUGH WARP.',
-                ];
+                $player['battle'] = ['active'=>true, 'enemy_name'=>['VOID MITE','ANOMALY SKIFF','SHEPHERD DRONE','GLASS RAIDER'][random_int(0,3)], 'enemy_hull'=>$enemyHull, 'enemy_max_hull'=>$enemyHull, 'log'=>'HOSTILE SIGNAL FOLLOWED YOU THROUGH WARP.'];
                 $event = ['title'=>'WARP AMBUSH', 'text'=>'An alien vessel tears through the closing corridor.'];
             } elseif ($roll <= 35) {
                 $salvage = random_int(30, 110);
@@ -315,13 +428,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
             $roll = random_int(1, 100);
             if ($roll <= 28 + ($danger * 4)) {
                 $enemyHull = random_int(45, 70) + ($danger * 10);
-                $player['battle'] = [
-                    'active'=>true,
-                    'enemy_name'=>['VOID MITE','ANOMALY SKIFF','SHEPHERD DRONE','GLASS RAIDER','CLEAN MACHINE SENTINEL'][random_int(0,4)],
-                    'enemy_hull'=>$enemyHull,
-                    'enemy_max_hull'=>$enemyHull,
-                    'log'=>'THE CONTACT REFUSES ALL HAILS.',
-                ];
+                $player['battle'] = ['active'=>true, 'enemy_name'=>['VOID MITE','ANOMALY SKIFF','SHEPHERD DRONE','GLASS RAIDER','CLEAN MACHINE SENTINEL'][random_int(0,4)], 'enemy_hull'=>$enemyHull, 'enemy_max_hull'=>$enemyHull, 'log'=>'THE CONTACT REFUSES ALL HAILS.'];
                 $event = ['title'=>'HOSTILE SIGNAL', 'text'=>'Weapons signatures lock onto your hull.'];
                 $message = 'ALIEN CONTACT DETECTED';
             } elseif ($roll <= 62) {
@@ -366,9 +473,7 @@ $result = mutate_state(function(array &$state) use ($action, $deviceId, $callsig
                     $damageTaken = apply_damage($player, random_int(8, 20));
                     $battle['log'] = 'RETREAT BLOCKED BY TRACTOR SIGNAL.';
                 }
-            } else {
-                return ['ok'=>false, 'error'=>'Unknown combat command'];
-            }
+            } else return ['ok'=>false, 'error'=>'Unknown combat command'];
             $message = $battle['log'];
             if ($battle['enemy_hull'] <= 0 && $battle['active']) {
                 $battle['active'] = false;

@@ -1,9 +1,6 @@
-# Runtime state and private/local output
 website/data/state.json
 **/local_state.json
 **/ELEMENT115_*.mid
-
-# Publisher workspace
 _GITHUB_WORK/
 *.log
 Thumbs.db
